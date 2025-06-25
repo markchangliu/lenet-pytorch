@@ -3,6 +3,45 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 
+def loss_func(
+    cat_ids: torch.Tensor,
+    preds: torch.Tensor
+) -> torch.Tensor:
+    """
+    Args
+    - `cat_ids`: `torch.Tensor`, shape `(b, )`
+    - `outputs`: `torch.Tensor`, shape `(b, 10)`
+
+    Returns
+    - `loss`: `torch.Tensor`, shape `(1, )`
+    """
+    batch_size = preds.shape[0]
+    target_dist = preds[range(batch_size), cat_ids]
+    j = torch.as_tensor(0.1)
+    dist_exp = torch.exp(-preds)
+    loss = target_dist + torch.log(torch.exp(-j) + torch.sum(dist_exp, dim = 1))
+    loss = torch.sum(loss, dim = 0) / batch_size
+    return loss
+
+@torch.no_grad()
+def eval_func(
+    cat_ids: torch.Tensor,
+    preds: torch.Tensor
+) -> torch.Tensor:
+    """
+    Args
+    - `cat_ids`: `torch.Tensor`, shape `(b, )`
+    - `outputs`: `torch.Tensor`, shape `(b, 10)`
+
+    Returns
+    - `loss`: `torch.Tensor`, shape `(1, )`
+    """
+    vals, pred_cat_ids = torch.min(preds, dim = 1)
+    correctness = pred_cat_ids == cat_ids
+    num_corrects = torch.sum(correctness)
+    acc = num_corrects / len(cat_ids)
+    return acc
+
 class C1(nn.Module):
     """
     Arch
@@ -150,27 +189,6 @@ class Output(nn.Module):
         y = x.view(-1, 1, 84) - self.rbf_vectors.view(-1, 10, 84)
         y = torch.sum(y ** 2, dim = 2)
         return y
-    
-def compute_loss(
-    outputs: torch.Tensor,
-    cat_ids: torch.Tensor
-) -> torch.Tensor:
-    """
-    Args
-    - `outputs`: `torch.Tensor`, shape `(b, 10)`
-    - `cat_ids`: `torch.Tensor`, shape `(b, )`
-
-    Returns
-    - `loss`: `torch.Tensor`, shape `(1, )`
-    """
-    batch_size = outputs.shape[0]
-    target_dist = outputs[range(batch_size), cat_ids]
-    j = torch.as_tensor(0.1)
-    dist_exp = torch.exp(-outputs)
-    loss = target_dist + torch.log(torch.exp(-j) + torch.sum(dist_exp, dim = 1))
-    loss = torch.sum(loss, dim = 0) / batch_size
-    return loss
-
 
 class LeNet5(nn.Module):
     def __init__(self, rbf_vectors: torch.Tensor) -> None:
