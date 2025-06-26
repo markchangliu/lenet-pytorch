@@ -11,7 +11,7 @@ def setup_logging(
     logger = logging.getLogger(__name__)
     logger.setLevel(logging.DEBUG)
     formatter = logging.Formatter(
-        "%(asctime)s - %(name)s - %(levelname)s - %(filename)s:%(lineno)d - %(message)s"
+        "%(asctime)s - %(filename)s:%(lineno)d - %(message)s"
     )
 
     # 创建文件处理器（输出到文件，级别为DEBUG）

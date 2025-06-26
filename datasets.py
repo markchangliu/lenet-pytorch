@@ -43,6 +43,7 @@ class ImageFolderDataset(Dataset):
 
     def __getitem__(self, idx: int) -> Tuple[torch.Tensor, int]:
         img_p, cat_id = self.data[idx]
-        img = cv2.imread(img_p)
+        img = cv2.imread(img_p, cv2.IMREAD_GRAYSCALE)
+        img = cv2.resize(img, (32, 32))
         img_input = self.transforms(img) if self.transforms is not None else img
         return img_input, cat_id
