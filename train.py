@@ -14,26 +14,21 @@ from torch.utils.data import DataLoader
 from torchvision.transforms import ToTensor
 
 from datasets import ImageFolderDataset
-from models import LeNet5, loss_func, eval_func
+from models import LeNet5, eval_func
+from models import loss_func_map as loss_func
 from utils import decode_rbf_vectors_from_imgs
-from loggers import setup_logging
+from utils import setup_logging
 
 
 def build_loader(
     train_data_roots: List[Union[os.PathLike, str]],
     test_data_roots: List[Union[os.PathLike, str]],
-    train_transforms: Callable[[np.ndarray], torch.Tensor],
-    test_transforms: Callable[[np.ndarray], torch.Tensor],
     cat_name_id_dict: Dict[str, int],
     batch_size: int, 
     num_workers: int
 ) -> Tuple[DataLoader, DataLoader]:
-    train_set = ImageFolderDataset(
-        train_data_roots, train_transforms, cat_name_id_dict
-    )
-    test_set = ImageFolderDataset(
-        test_data_roots, test_transforms, cat_name_id_dict
-    )
+    train_set = ImageFolderDataset(train_data_roots, cat_name_id_dict)
+    test_set = ImageFolderDataset(test_data_roots, cat_name_id_dict)
 
     train_loader = DataLoader(
         train_set, batch_size, True, num_workers = num_workers, pin_memory = True
@@ -44,11 +39,11 @@ def build_loader(
 
     return train_loader, test_loader
 
-def build_optimizer(
+def build_sgd_optimizer(
     model_params: Iterable[Union[nn.Parameter, Dict[str, nn.Parameter]]],
     lr_global: float,
     **other_params_global: float
-) -> Optimizer:
+) -> SGD:
     """
     example
     ```
@@ -73,6 +68,7 @@ def eval_model(
     test_loader: DataLoader,
     loss_func: Callable[[torch.Tensor, torch.Tensor], torch.Tensor],
     eval_func: Callable[[torch.Tensor, torch.Tensor], torch.Tensor],
+    device: str
 ) -> Tuple[float, float]:
     """
     Returns
@@ -92,8 +88,8 @@ def eval_model(
 
         imgs: torch.Tensor
         cat_ids: torch.Tensor
-        imgs = imgs.to("cuda:0", non_blocking = True)
-        cat_ids = cat_ids.to("cuda:0", non_blocking = True)
+        imgs = imgs.to(device, non_blocking = True)
+        cat_ids = cat_ids.to(device, non_blocking = True)
 
         preds = model(imgs)
         loss = loss_func(cat_ids, preds)
@@ -136,6 +132,7 @@ def train_epochs(
     loss_func: Callable[[torch.Tensor, torch.Tensor], torch.Tensor],
     eval_func: Callable[[torch.Tensor, torch.Tensor], torch.Tensor],
     logger: Logger,
+    device: str, 
     save_ckpt_dir: Union[os.PathLike, str],
     num_epoches: int,
     print_iter_period: int,
@@ -167,8 +164,8 @@ def train_epochs(
             curr_batches += 1
             curr_iters += batch_size
 
-            imgs = imgs.to("cuda:0", non_blocking = True)
-            cat_ids = cat_ids.to("cuda:0", non_blocking = True)
+            imgs = imgs.to(device, non_blocking = True)
+            cat_ids = cat_ids.to(device, non_blocking = True)
             preds = model(imgs)
             loss = loss_func(cat_ids, preds)
 
@@ -189,7 +186,7 @@ def train_epochs(
             model.eval()
 
             test_loss_val, test_metric_val = eval_model(
-                model, test_loader, loss_func, eval_func,
+                model, test_loader, loss_func, eval_func, device
             )
 
             msg = f"Test epoch {curr_epoches}/{num_epoches}, "
@@ -214,45 +211,3 @@ def train_epochs(
     best_ckpt_p = os.path.join(save_ckpt_dir, best_model_name)
     best_ckpt_save_p = os.path.join(save_ckpt_dir, "best.pth")
     shutil.copy(best_ckpt_p, best_ckpt_save_p)
-
-
-def main() -> None:
-    train_loader, test_loader = build_loader(
-        ["/data/cliu/large_files/projects/minist/data/train"],
-        ["/data/cliu/large_files/projects/minist/data/test"],
-        ToTensor(),
-        ToTensor(),
-        {str(i): i for i in range(10)},
-        4096,
-        mp.cpu_count() // 2
-    )
-
-    rbf_vectors = decode_rbf_vectors_from_imgs(
-        "/data/cliu/large_files/projects/minist/data/RBF_kernel"
-    )
-    model = LeNet5(torch.as_tensor(rbf_vectors)).to("cuda:0")
-    optimizer = build_optimizer(
-        model.parameters(), 1e-5, momentum = 0.9, weight_decay = 1e-4
-    )
-    export_dir = "/data/cliu/large_files/projects/minist/runtimes/train_v01"
-    log_file = os.path.join(export_dir, "train_log.txt")
-    save_ckpt_dir = os.path.join(export_dir, "ckpts")
-    logger = setup_logging(log_file)
-
-    train_epochs(
-        model, 
-        train_loader,
-        test_loader,
-        optimizer,
-        loss_func,
-        eval_func,
-        logger,
-        save_ckpt_dir,
-        120,
-        4096*4,
-        4
-    )
-
-
-if __name__ == "__main__":
-    main()

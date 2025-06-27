@@ -4,21 +4,19 @@ from typing import Union, Callable, Dict, List, Tuple, Optional
 import cv2
 import numpy as np
 import torch
-from torch.utils.data import Dataset, DataLoader
+from torch.utils.data import Dataset
 
 
 class ImageFolderDataset(Dataset):
     def __init__(
         self,
         data_roots: List[Union[str, os.PathLike]],
-        transforms: Optional[Callable[[np.ndarray], torch.Tensor]],
         cat_name_id_dict: Dict[str, int]
     ) -> None:
         assert isinstance(data_roots, list)
 
         self.cat_name_id_dict = cat_name_id_dict
         self.cat_id_name_dict = {v: k for k, v in cat_name_id_dict.items()}
-        self.transforms = transforms
         self.data = [] # (img_p, cat_id)
 
         dirnames = list(cat_name_id_dict.keys())
@@ -44,6 +42,6 @@ class ImageFolderDataset(Dataset):
     def __getitem__(self, idx: int) -> Tuple[torch.Tensor, int]:
         img_p, cat_id = self.data[idx]
         img = cv2.imread(img_p, cv2.IMREAD_GRAYSCALE)
-        img = cv2.resize(img, (32, 32))
-        img_input = self.transforms(img) if self.transforms is not None else img
-        return img_input, cat_id
+        img = cv2.resize(img, (32, 32))[np.newaxis, ...].astype(np.float32)
+        img = img / 255.0
+        return img, cat_id

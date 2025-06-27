@@ -208,3 +208,4 @@ __marimo__/
 
 # tmp files
 tmp*
+runtimes/**/*.pth

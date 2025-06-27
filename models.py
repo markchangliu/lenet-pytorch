@@ -3,9 +3,9 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 
-def loss_func(
+def loss_func_map(
     cat_ids: torch.Tensor,
-    preds: torch.Tensor
+    outputs: torch.Tensor
 ) -> torch.Tensor:
     """
     Args
@@ -15,18 +15,17 @@ def loss_func(
     Returns
     - `loss`: `torch.Tensor`, shape `(1, )`
     """
-    batch_size = preds.shape[0]
-    target_dist = preds[range(batch_size), cat_ids]
+    batch_size = outputs.shape[0]
+    target_dist = outputs[range(batch_size), cat_ids]
     j = torch.as_tensor(0.1)
-    dist_exp = torch.exp(-preds)
+    dist_exp = torch.exp(-outputs)
     loss = target_dist + torch.log(torch.exp(-j) + torch.sum(dist_exp, dim = 1))
     loss = torch.sum(loss, dim = 0) / batch_size
     return loss
 
-@torch.no_grad()
-def eval_func(
-    cat_ids: torch.Tensor,
-    preds: torch.Tensor
+def loss_func_mse(
+    cat_ids: torch.Tensor, 
+    outputs: torch.Tensor
 ) -> torch.Tensor:
     """
     Args
@@ -36,7 +35,38 @@ def eval_func(
     Returns
     - `loss`: `torch.Tensor`, shape `(1, )`
     """
-    vals, pred_cat_ids = torch.min(preds, dim = 1)
+    # 直接取正确类别的距离的平均值
+    batch_size = outputs.shape[0]
+    target_dist = outputs[torch.arange(batch_size), cat_ids]
+    loss = torch.mean(target_dist)  # 最小化正确类别的平均距离
+    return loss
+
+def init_weights(m: nn.Module) -> None:
+    if isinstance(m, nn.Conv2d):
+        nn.init.kaiming_normal_(m.weight, nonlinearity='relu')
+        if m.bias is not None: nn.init.zeros_(m.bias)
+    elif isinstance(m, nn.Linear):
+        nn.init.xavier_uniform_(m.weight)
+        nn.init.zeros_(m.bias)
+    elif hasattr(m, "weight") and hasattr(m, "bias"):
+        # S2 and S4
+        nn.init.ones_(m.weight)
+        nn.init.zeros_(m.bias)
+
+@torch.no_grad()
+def eval_func(
+    cat_ids: torch.Tensor,
+    outputs: torch.Tensor
+) -> torch.Tensor:
+    """
+    Args
+    - `cat_ids`: `torch.Tensor`, shape `(b, )`
+    - `outputs`: `torch.Tensor`, shape `(b, 10)`
+
+    Returns
+    - `loss`: `torch.Tensor`, shape `(1, )`
+    """
+    vals, pred_cat_ids = torch.min(outputs, dim = 1)
     correctness = pred_cat_ids == cat_ids
     num_corrects = torch.sum(correctness)
     acc = num_corrects / len(cat_ids)
